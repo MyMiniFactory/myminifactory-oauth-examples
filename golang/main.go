@@ -1,8 +1,12 @@
 package main
 
 import (
+	"bytes"
+	"encoding/base64"
 	"fmt"
+	"io/ioutil"
 	"net/http"
+	"net/url"
 
 	log "github.com/Sirupsen/logrus"
 )
@@ -44,17 +48,47 @@ func (s Server) index(w http.ResponseWriter, r *http.Request) {
 	url := s.Cnf.oauthURLBuilder()
 	content := fmt.Sprintf("<a href='%s'>Login</a>", url)
 	fmt.Fprintf(w, content)
-	log.Info("Route / -> handled")
 }
 
 func (s Server) callback(w http.ResponseWriter, r *http.Request) {
-	url := s.Cnf.oauthURLBuilder()
-	log.Info(r.URL.Query().Get("code"))
-	content := fmt.Sprintf("<a href='%s'>Logins</a>", url)
+	query := r.URL.Query()
+	content := "Error happened"
+	if query.Get("state") == s.Cnf.State {
+		content = s.authorize(query.Get("code"))
+	}
 	fmt.Fprintf(w, content)
-	log.Info("Route /callback -> handled")
 }
 
+func (s Server) authorize(code string) string {
+	bodyString := ""
+	auth := fmt.Sprintf("Basic %s", basicAuth(s.Cnf.Key, s.Cnf.Secret))
+	resource := "/v1/oauth/tokens"
+	data := url.Values{}
+	data.Set("grant_type", "authorization_code")
+	data.Add("redirect_uri", s.Cnf.Redirect)
+	data.Add("code", code)
+
+	u, _ := url.ParseRequestURI(s.Cnf.BaseURL)
+	u.Path = resource
+	urlStr := fmt.Sprintf("%v", u)
+
+	client := &http.Client{}
+	r, _ := http.NewRequest("POST", urlStr, bytes.NewBufferString(data.Encode()))
+	r.Header.Add("Authorization", auth)
+	r.Header.Add("Content-Type", "application/x-www-form-urlencoded")
+
+	resp, _ := client.Do(r)
+	if resp.StatusCode == 200 {
+		bodyBytes, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			log.Error(err)
+		}
+		bodyString = string(bodyBytes)
+	}
+	return bodyString
+}
+
+// Start service
 func (s Server) Start() {
 	log.Infof("Starting server... (port: '%s')", s.Port)
 	http.HandleFunc("/", s.index)
@@ -72,4 +106,9 @@ func main() {
 		Cnf:  config.get(),
 	}
 	server.Start()
+}
+
+func basicAuth(username, password string) string {
+	auth := username + ":" + password
+	return base64.StdEncoding.EncodeToString([]byte(auth))
 }
