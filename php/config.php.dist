@@ -1,0 +1,12 @@
+<?php
+
+// Copy this file to 'config.php'
+
+define('PROTOCOL', 'http');
+define('HOST', 'localhost');
+define('PORT', '8000');
+define('CLIENT_KEY', 'client_key');
+define('CLIENT_SECRET', 'client_secret');
+
+define('AUTH_API_BASE_URI', 'https://auth.myminifactory.com');
+define('AUTH_API_VERSION', '/v1');
